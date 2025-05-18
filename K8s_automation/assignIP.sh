@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# assign_ip.sh — Asigna una IP estática a la interfaz de red interna
+# assign_ip.sh — Asigna una IP estática a la interfaz de red interna k8net
 #
 # Uso:
 #   sudo ./assign_ip.sh <INTERFAZ> <IP/CIDR> <PUERTA_ENLACE>
