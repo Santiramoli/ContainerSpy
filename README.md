@@ -1,6 +1,6 @@
 ﻿<!-- Include your logo image here with rounded corners -->
 <p align="center">
-  <img src="images/Logo.png" alt="ContainerSpy Logo" style="border-radius: 12px; max-width: 200px;">
+  <img src="images/Logo.png" alt="ContainerSpy Logo" style="border-radius: 12px; max-width: 50px;">
 </p>
 
 # 🐳 ContainerSpy: Container Activity Auditing & Detection with eBPF
