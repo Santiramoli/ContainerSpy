@@ -1,35 +1,42 @@
-﻿# 🐳 ContainerSpy: Auditoría y Detección de Actividad en Contenedores mediante eBPF
+﻿<!-- Include your logo image here with rounded corners -->
+<p align="center">
+  <img src="images/Logo.png" alt="ContainerSpy Logo" style="border-radius: 12px; max-width: 200px;">
+</p>
 
-## 🎯 Descripción del Proyecto
+# 🐳 ContainerSpy: Container Activity Auditing & Detection with eBPF
 
-**ContainerSpy** es una herramienta desarrollada como Trabajo de Fin de Grado (TFG) orientada a la **auditoría, detección de comportamiento sospechoso y visualización de eventos** que ocurren en contenedores de Linux. Está enfocada especialmente en los **espacios de nombres del kernel (namespaces)**, **cgroups** y la **interacción entre procesos y el kernel**.
+## 🎯 Project Overview
 
-El proyecto emplea tecnologías modernas como **eBPF**, **Prometheus**, **Grafana** y se despliega en un clúster de **Kubernetes** gestionado manualmente para obtener el máximo control y visibilidad.
+**ContainerSpy** is a Bachelor’s Thesis–level tool for **auditing**, **suspicious-behavior detection**, and **event visualization** inside Linux containers. It focuses on **kernel namespaces**, **cgroups**, and **process–kernel interactions**, providing deep visibility into container activity.
 
----
-
-## 🕵️‍♂️ Qué monitoriza ContainerSpy
-
-- Creación de contenedores y namespaces
-- Cambios en `cgroups`, `mount`, `user`, `pid` namespaces
-- Llamadas al sistema (`syscalls`) sensibles
-- Interacciones entre contenedores
-- Posibles ataques (exploits, namespace escapes)
+Built on modern observability technologies—**eBPF**, **Prometheus**, **Grafana**—and deployed on a **hand-managed Kubernetes cluster**, ContainerSpy offers fine-grained control and transparency across your container runtime.
 
 ---
 
-## 📊 Visualización
+## 🕵️‍♂️ What ContainerSpy Monitors
 
-Los datos capturados se transforman en métricas y logs estructurados que son enviados a **Prometheus** y visualizados en **Grafana** mediante dashboards personalizados que permiten:
-
-- Ver actividad por contenedor/pod
-- Detectar patrones anómalos
-- Recibir alertas de eventos peligrosos
+- Creation of containers and kernel namespaces  
+- Changes to cgroups and `mount`, `user`, and `pid` namespaces  
+- Sensitive system calls (syscalls)  
+- Cross-container interactions  
+- Potential attack vectors (exploits, namespace escapes)  
 
 ---
 
-## 🚀 Objetivo
+## 📊 Visualization & Alerting
 
-Demostrar cómo es posible **aumentar la seguridad y trazabilidad de entornos Kubernetes** mediante tecnologías de observabilidad a bajo nivel como eBPF, superando las limitaciones de las soluciones tradicionales de auditoría dentro de contenedores.
+ContainerSpy converts raw data into structured metrics and logs, which are:
+
+1. **Scraped by Prometheus**  
+2. **Visualized in Grafana** via custom dashboards, enabling you to:  
+   - Track per-container and per-pod activity  
+   - Spot anomalous patterns  
+   - Configure alerts for dangerous events  
+
+---
+
+## 🚀 Goals
+
+Demonstrate how low-level observability powered by eBPF can **enhance security and traceability** in Kubernetes environments, overcoming the blind spots of traditional container auditing tools.
 
 ---
