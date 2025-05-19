@@ -3,7 +3,7 @@
   <img
     src="./assets/logo.png"
     alt="ContainerSpy Logo"
-    width="100"
+    width="200"
     style="border-radius:12px;"
   >
 </p>
