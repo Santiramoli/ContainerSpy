@@ -1,7 +1,7 @@
 ﻿<!-- Include your logo image here with rounded corners -->
 <p align="center">
   <img
-    src="./assets/logo.png"
+    src="./images/Logo.png"
     alt="ContainerSpy Logo"
     width="200"
     style="border-radius:12px;"
