@@ -7,6 +7,7 @@ BPFTOOL   := bpftool
 # Flags para la compilación de eBPF
 BPF_CFLAGS := -O2 -g -target bpf -D__TARGET_ARCH_x86_64 $(shell pkg-config --cflags libbpf)
 
+
 # Ficheros
 BPF_SRC := containerSpy.bpf.c
 BPF_OBJ := containerSpy.bpf.o

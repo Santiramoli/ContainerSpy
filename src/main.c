@@ -24,12 +24,13 @@ static void handle_signal(int sig) { exiting = true; }
 int main(int argc, char **argv) {
 
     event_handler_init();
-    metrics_init();
     struct mg_context *ctx = http_server_start("8080");
     if (!ctx) {
         fprintf(stderr, "No se pudo arrancar HTTP server\n");
         return 1;
     }
+    
+    http_server_register_handler(ctx, "/metrics", metrics_handler, NULL);
     printf("Servidor métricas escuchando en http://localhost:8080/metrics\n");
 
 
@@ -76,7 +77,6 @@ int main(int argc, char **argv) {
 
     ring_buffer__free(rb);
     http_server_stop(ctx);
-    metrics_cleanup();
     event_handler_cleanup();
 
 cleanup:

@@ -1,18 +1,28 @@
-#include "../include/handle_event.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
 #include "../include/metrics.h"
+#include "../include/utils.h"
+#include "../include/handle_event.h"
 
-static id_list_t lista;
+
+const char *base_path = "/sys/fs/cgroup";
+char pod_id[128];
+char container_id[128];
+id_list_t pods;
+char node_name[64];
+
 
 
 void event_handler_init(void) {
-    id_list_init(&lista, 20);
+    pod_list_init(&pods, 8); 
 }
 
 void event_handler_cleanup(void) {
-    id_list_free(&lista);
+    pod_list_free(&pods);
 }
 
 bool should_ignore_comm(const char *comm) {
@@ -31,102 +41,123 @@ int validate_event(const struct event_t *e, size_t len) {
     return 0;
 }
 
-void process_cgroup_mkdir(const struct event_t *e) {
-    printf("\nCGROUP DETECTADO\n");
-    time_t now = time(NULL);
-    char *s = ctime(&now);
-    printf("Fecha y hora: %s", s);
-    printf("ID del cgroup: %lu\n", e->cgroup_id);
-    printf("Ruta del cgroup: %s\n", e->cgroup_path);
-    char *id = get_container_id(e->cgroup_path);
-    if (id) {
-        if (id_list_add(&lista, id)) {}
-        metrics_increment(id, METRIC_CGROUP_MKDIR);
-        metrics_set_active(id, 1);
-        free(id);
-    }
-}
-
-void process_cgroup_rmdir(const struct event_t *e) {
-    printf("\nCGROUP ELIMINADO\n");
-    time_t now = time(NULL);
-    char *s = ctime(&now);
-    printf("Fecha y hora: %s", s);
-    printf("ID del cgroup: %lu\n", e->cgroup_id);
-    printf("Ruta del cgroup: %s\n", e->cgroup_path);
-    
-    char *id = get_container_id(e->cgroup_path);
-    if (id) {
-        id_list_remove(&lista, id);
-        metrics_increment(id, METRIC_CGROUP_MKDIR); 
-        metrics_set_active(id, 0);
-        free(id);
-    }
-
-}
-
-
-void process_namespace_event(const struct event_t *e) {
-    // 1) ignorar runtime
-    if (should_ignore_comm(e->comm)) return;
-
-    // 2) obtener ruta de cgroup real del pid
-    char path[256] = {0}, filename[64];
-    snprintf(filename, sizeof(filename), "/proc/%u/cgroup", e->pid);
-    FILE *f = fopen(filename, "r");
-    if (!f) return;
-    char line[512];
-    while (fgets(line, sizeof(line), f)) {
-        char *p = strstr(line, "::");
-        if (p) {
-            strncpy(path, p+2, sizeof(path)-1);
-            path[strcspn(path, "\n")] = '\0';
-            break;
-        }
-    }
-    fclose(f);
-
-    // 3) extraer container ID
-    char *cid = get_container_id(path);
-    if (!cid) return;
-
-    // 4) imprimir y contar
-    const char *evt = e->type == EVT_CLONE   ? "CLONE" :
-                      e->type == EVT_UNSHARE ? "UNSHARE" :
-                      e->type == EVT_SETNS   ? "SETNS" : "UNKNOWN";
-    printf("\n%s en contenedor %s\n", evt, cid);
-
-    // timestamp y detalles
-    time_t now = time(NULL);
-    printf("Fecha y hora: %s", ctime(&now));
-    printf("PID=%u, TID=%u, comm=%s\n", e->pid, e->tgid, e->comm);
-    decode_clone_flags(e->flags);
-    metrics_increment(  cid, e->type == EVT_CLONE   ? METRIC_NS_CLONE : e->type == EVT_UNSHARE ? METRIC_NS_UNSHARE : METRIC_NS_SETNS);
-    free(cid);
-}
-
-
 int handle_event(void *ctx, void *data, size_t len) {
     (void)ctx;
     const struct event_t *e = data;
+
+    // Ignorar ciertos comandos
     if (should_ignore_comm(e->comm))
         return 0;
     if (validate_event(e, len) < 0)
         return -1;
+
+    char pod_id[64];
+    char container_id[64];
+
     switch (e->type) {
-        case EVT_CGROUP_MKDIR:
-            process_cgroup_mkdir(e);
+        case EVT_CGROUP_MKDIR: {
+            printf("\nCGROUP MKDIR\n");
+            printf("Command: %s\n", e->comm);
+            printf("Path: %s\n", e->cgroup_path);
+
+            char full_path[4096];
+            snprintf(full_path, sizeof(full_path), "%s%s", base_path, e->cgroup_path);
+            uint64_t cgroup_id = get_cgroup_id_from_path(full_path);
+
+            if (cgroup_id == 0) {
+                printf("Error obteniendo Cgroup ID\n");
+                break;
+            }
+            printf("Cgroup ID es: %lu\n", cgroup_id);
+
+            extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
+            
+            if (strcmp(pod_id, "unknown") != 0 && strcmp(container_id, "unknown") != 0) {
+                printf("POD ID: %s\n", pod_id);
+                printf("Container ID: %s\n", container_id);
+                
+
+                container_entry_t new_container = {0};
+                strncpy(new_container.container_id, container_id, sizeof(new_container.container_id) - 1);
+                new_container.metrics.cgroup_id = cgroup_id;
+                new_container.metrics.running = 1;
+
+                if (get_node_name(node_name, sizeof(node_name)) != 0) {
+                    printf("No se pudo obtener el nombre del nodo\n");
+                } 
+
+                
+                add_container_to_pod(&pods, pod_id, new_container, node_name);
+            }
+
+            
+
             break;
-        case EVT_CGROUP_RMDIR:
-            process_cgroup_rmdir(e);
+        }
+        case EVT_CGROUP_RMDIR: {
+            printf("\nCGROUP RMDIR\n");
+            printf("Command: %s\n", e->comm);
+            printf("Path: %s\n", e->cgroup_path);
+            printf("Cgroup ID: %lu\n", e->cgroup_id);
+
+            extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
+            printf("POD ID: %s\n", pod_id);
+            printf("Container ID: %s\n", container_id);
+
+            if (strcmp(pod_id, "unknown") != 0 && strcmp(container_id, "unknown") != 0) {
+                pod_entry_t *pod = pod_list_find(&pods, pod_id);
+                if (pod) {
+                    bool removed = pod_remove_container(pod, container_id);
+                    if (removed) {
+                        printf("Contenedor eliminado correctamente\n");
+                        if (pod->container_count == 0) {
+                            pod_list_remove(&pods, pod_id);
+                            printf("Pod eliminado porque no tiene contenedores\n");
+                        }
+                    } else {
+                        printf("No se encontró el contenedor para eliminar\n");
+                    }
+                }
+            }
             break;
+        }
         case EVT_CLONE:
         case EVT_UNSHARE:
-        case EVT_SETNS:
-            process_namespace_event(e);
+        case EVT_SETNS: {
+            if (!(e->flags & NS_MASK)) return 0;
+
+            printf("\n%s\n", e->type == EVT_CLONE ? "CLONE" : e->type == EVT_UNSHARE ? "UNSHARE" : "SETNS");
+            printf("PID: %u, TGID: %u, PPID: %u, UID: %u, GID: %u, Command: %s\n",
+                   e->pid, e->tgid, e->ppid, e->uid, e->gid, e->comm);
+            printf("CGROUPID: %lu\n", e->cgroup_id);
+            decode_clone_flags(e->flags);
+
+            // Buscar contenedor por cgroup_id
+            for (size_t i = 0; i < pods.count; i++) {
+                pod_entry_t *pod = &pods.items[i];
+                for (size_t j = 0; j < pod->container_count; j++) {
+                    container_entry_t *container = &pod->containers[j];
+                    if (container->metrics.cgroup_id == e->cgroup_id) {
+                        // Actualizar métricas
+                        switch (e->type) {
+                            case EVT_CLONE:
+                                update_flags(&container->metrics.clone_flags_count, e->flags);
+                                break;
+                            case EVT_UNSHARE:
+                                update_flags(&container->metrics.unshare_flags_count, e->flags);
+                                break;
+                            case EVT_SETNS:
+                                update_flags(&container->metrics.setns_flags_count, e->flags);
+                                break;
+                        }
+                        goto metrics_updated;
+                    }
+                }
+            }
+        metrics_updated:
             break;
+        }
         default:
-            // unreachable
             break;
     }
     return 0;
