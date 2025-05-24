@@ -69,6 +69,9 @@ int handle_event(void *ctx, void *data, size_t len) {
                 break;
             }
             printf("Cgroup ID es: %lu\n", cgroup_id);
+            if (get_node_name(node_name, sizeof(node_name)) != 0) {
+                printf("No se pudo obtener el nombre del nodo\n");
+            }
 
             extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
             
@@ -82,15 +85,9 @@ int handle_event(void *ctx, void *data, size_t len) {
                 new_container.metrics.cgroup_id = cgroup_id;
                 new_container.metrics.running = 1;
 
-                if (get_node_name(node_name, sizeof(node_name)) != 0) {
-                    printf("No se pudo obtener el nombre del nodo\n");
-                } 
-
                 
                 add_container_to_pod(&pods, pod_id, new_container, node_name);
             }
-
-            
 
             break;
         }

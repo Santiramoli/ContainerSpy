@@ -11,27 +11,14 @@ extern id_list_t pods;
 size_t generate_metrics(char *buffer, size_t max_len) {
     size_t offset = 0;
 
-    // Métricas de estado running
-    for (size_t i = 0; i < pods.count; i++) {
-        pod_entry_t *pod = &pods.items[i];
-        for (size_t j = 0; j < pod->container_count; j++) {
-            container_entry_t *cont = &pod->containers[j];
-
-            // Aquí supongo que tienes un campo explícito running en cont->metrics
-            int running = cont->metrics.running; // Debes tenerlo definido y actualizado
-
-            offset += snprintf(buffer + offset, max_len - offset,
-                "containerspy_container_running{nodo=\"%s\",podID=\"%s\",containerID=\"%s\"} %d\n",
-                pod->node, pod->pod_id, cont->container_id, running);
-        }
-    }
-
-
-    // Macro para imprimir flags de un ns_flags_counters_t con event y labels
 #define PRINT_FLAG(event, flagname, value) \
-    offset += snprintf(buffer + offset, max_len - offset, \
-        "containerspy_flags_total{nodo=\"%s\",podID=\"%s\",containerID=\"%s\",event=\"%s\",flag=\"%s\"} %lu\n", \
-        pod->node, pod->pod_id, cont->container_id, event, flagname, value);
+    do { \
+        if ((value) != 0) { \
+            offset += snprintf(buffer + offset, max_len - offset, \
+                "containerspy_flags_total{nodo=\"%s\",podID=\"%s\",containerID=\"%s\",event=\"%s\",flag=\"%s\"} %lu\n", \
+                pod->node, pod->pod_id, cont->container_id, event, flagname, value); \
+        } \
+    } while (0)
 
     for (size_t i = 0; i < pods.count; i++) {
         pod_entry_t *pod = &pods.items[i];
@@ -74,6 +61,7 @@ size_t generate_metrics(char *buffer, size_t max_len) {
 
     return offset;
 }
+
 
 
 

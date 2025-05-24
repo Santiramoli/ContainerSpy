@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: containerspy
+  namespace: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+spec:
+  selector:
+    matchLabels:
+      app: containerspy
+  template:
+    metadata:
+      labels:
+        app: containerspy
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      hostNetwork: true
+      imagePullSecrets:
+      - name: regcred
+      securityContext:
+        # Opcional, ajusta nivel SELinux si quieres probar aquí (puedes eliminar si prefieres)
+        seLinuxOptions:
+          level: "s0:c123,c456"
+      containers:
+      - name: containerspy
+        image: chris3bass/containerspy:latest
+        ports:
+        - containerPort: 8080
+          name: metrics
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+            - SYS_RESOURCE
+        volumeMounts:
+        - name: sys
+          mountPath: /sys
+          readOnly: true
+        - name: proc
+          mountPath: /proc
+          readOnly: false   # importante para evitar error con SELinux y labels
+      volumes:
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: proc
+        hostPath:
+          path: /proc
+
