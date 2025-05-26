@@ -275,6 +275,11 @@ void handle_event_cgroup_mkdir(const struct event_t *e) {
 
     extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
 
+    if (strcmp(pod_id, "unknown") == 0 || strcmp(container_id, "unknown") == 0) {
+    // Ignorar eventos sin IDs válidos
+    return;
+    }
+    
     char full_path[4096];
     snprintf(full_path, sizeof(full_path), "%s%s", base_path, e->cgroup_path);
     uint64_t cgroup_id = get_cgroup_id_from_path(full_path);
