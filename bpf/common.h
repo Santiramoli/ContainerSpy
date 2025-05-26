@@ -13,6 +13,8 @@
 
 
 #define MAX_CONTAINERS 1024
+#define MAX_PREFIX_LEN 24
+
 
 enum events_type {
     EVT_CLONE = 0,
@@ -23,7 +25,16 @@ enum events_type {
     EVT_FORK,
     EVT_EXEC,
     EVT_EXIT,
-    EVT_CGROUP_ATTACH_TASK
+    EVT_CLONE_EXIT,
+    EVT_UNSHARE_EXIT,
+    EVT_SETNS_EXIT,
+    EVT_OPEN,
+    EVT_OPENAT,
+    EVT_OPEN_EXIT,
+    EVT_OPENAT_EXIT,
+    EVT_WRITE,
+    EVT_CLOSE,
+    EVT_WRITE_EXIT
 };
 
 #endif
