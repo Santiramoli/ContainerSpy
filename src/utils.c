@@ -1,12 +1,8 @@
 #include "../include/utils.h"
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include "../include/common.h"
+
+
+extern zlog_category_t *c;
+
 
 /**********************************************
 ***Funciones para gestionar la lista de pods***
@@ -142,7 +138,6 @@ void add_container_to_pod(id_list_t *pods, const char *pod_id, container_entry_t
     pod_add_container(pod, container);
 }
 
-
 container_entry_t *pod_find_container_by_id(pod_entry_t *pod, const char *container_id){
     for (size_t i = 0; i < pod->container_count; i++) {
         if (strcmp(pod->containers[i].container_id, container_id) == 0) {
@@ -174,9 +169,159 @@ bool pod_remove_container(pod_entry_t *pod, const char *container_id){
     return false;
 }
 
+/**************************************
+*  Funciones para gestionar los logs  *
+***************************************/
+
+void log_basic_event_info(const struct event_t *e) {
+    zlog_info(c, "PID: %u, TGID: %u, PPID: %u, UID: %u, GID: %u, Command: %s",
+              e->pid, e->tgid, e->ppid, e->uid, e->gid, e->comm);
+    zlog_info(c, "CGROUPID: %lu", e->cgroup_id);
+}
+
+void log_event_exit(const struct event_t *e, const char *event_name, bool has_latency) {
+    zlog_info(c, "%s", event_name);
+    log_basic_event_info(e);
+    zlog_info(c, "RESULTADO: %lu", e->ret);
+    if (has_latency) {
+        zlog_info(c, "Latencia: %lu", e->latency_ns);
+    }
+}
+
+void log_event_file(const struct event_t *e, const char *event_name) {
+    zlog_info(c, "%s", event_name);
+    log_basic_event_info(e);
+    zlog_info(c, "Archivo: %s", e->filename);
+}
+
+void log_event_cgroup_mkdir(const struct event_t *e) {
+    char pod_id[64] = {0};
+    char container_id[64] = {0};
+
+    zlog_info(c, "CGROUP MKDIR");
+    zlog_info(c, "Command: %s", e->comm);
+    zlog_info(c, "Path: %s", e->cgroup_path);
+
+    char full_path[4096];
+    snprintf(full_path, sizeof(full_path), "%s%s", base_path, e->cgroup_path);
+    uint64_t cgroup_id = get_cgroup_id_from_path(full_path);
+
+    if (cgroup_id == 0) {
+        zlog_error(c, "Error obteniendo Cgroup ID");
+        return;
+    }
+    zlog_info(c, "Cgroup ID es: %lu", cgroup_id);
+
+    extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
+
+    if (strcmp(pod_id, "unknown") != 0 && strcmp(container_id, "unknown") != 0) {
+        zlog_info(c, "POD ID: %s", pod_id);
+        zlog_info(c, "Container ID: %s", container_id);
+    }
+}
+
+void log_event_cgroup_rmdir(const struct event_t *e) {
+    char pod_id[64] = {0};
+    char container_id[64] = {0};
+
+    zlog_info(c, "CGROUP RMDIR");
+    zlog_info(c, "Command: %s", e->comm);
+    zlog_info(c, "Path: %s", e->cgroup_path);
+    zlog_info(c, "Cgroup ID: %lu", e->cgroup_id);
+
+    extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
+
+    zlog_info(c, "POD ID: %s", pod_id);
+    zlog_info(c, "Container ID: %s", container_id);
+}
+
+void log_event_ns(const struct event_t *e) {
+    zlog_info(c, "%s", e->type == EVT_CLONE ? "CLONE" : e->type == EVT_UNSHARE ? "UNSHARE" : "SETNS");
+    log_basic_event_info(e);
+    decode_clone_flags(e->flags);
+}
+
+/********************************************
+*  Funciones para eventos cgroup y nsevent  *
+*********************************************/
 
 
-//-------------OTRAS FUNCIONES---------------------
+void handle_event_cgroup_rmdir(const struct event_t *e) {
+    char pod_id[64] = {0};
+    char container_id[64] = {0};
+
+    extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
+
+    if (strcmp(pod_id, "unknown") != 0 && strcmp(container_id, "unknown") != 0) {
+        pod_entry_t *pod = pod_list_find(&pods, pod_id);
+        if (pod) {
+            bool removed = pod_remove_container(pod, container_id);
+            if (removed) {
+                zlog_info(c, "Contenedor eliminado correctamente");
+                if (pod->container_count == 0) {
+                    pod_list_remove(&pods, pod_id);
+                    zlog_info(c, "Pod eliminado porque no tiene contenedores");
+                }
+            } else {
+                zlog_warn(c, "No se encontró el contenedor para eliminar");
+            }
+        }
+    }
+}
+
+void handle_event_cgroup_mkdir(const struct event_t *e) {
+    char pod_id[64] = {0};
+    char container_id[64] = {0};
+
+    extract_pod_and_container(e->cgroup_path, pod_id, sizeof(pod_id), container_id, sizeof(container_id));
+
+    char full_path[4096];
+    snprintf(full_path, sizeof(full_path), "%s%s", base_path, e->cgroup_path);
+    uint64_t cgroup_id = get_cgroup_id_from_path(full_path);
+    if (cgroup_id == 0) {
+        // Ya logueado en la función de log, aquí solo ignoramos la lógica.
+        return;
+    }
+
+    container_entry_t new_container = {0};
+    strncpy(new_container.container_id, container_id, sizeof(new_container.container_id) - 1);
+    new_container.metrics.cgroup_id = cgroup_id;
+    new_container.metrics.running = 1;
+
+    add_container_to_pod(&pods, pod_id, new_container, node_name);
+}
+
+void handle_event_ns(const struct event_t *e) {
+    if (!(e->flags & NS_MASK)) return;
+
+    // Buscar contenedor por cgroup_id y actualizar métricas
+    for (size_t i = 0; i < pods.count; i++) {
+        pod_entry_t *pod = &pods.items[i];
+        for (size_t j = 0; j < pod->container_count; j++) {
+            container_entry_t *container = &pod->containers[j];
+            if (container->metrics.cgroup_id == e->cgroup_id) {
+                switch (e->type) {
+                    case EVT_CLONE:
+                        update_flags(&container->metrics.clone_flags_count, e->flags);
+                        break;
+                    case EVT_UNSHARE:
+                        update_flags(&container->metrics.unshare_flags_count, e->flags);
+                        break;
+                    case EVT_SETNS:
+                        update_flags(&container->metrics.setns_flags_count, e->flags);
+                        break;
+                }
+                return;  // Salir luego de actualizar
+            }
+        }
+    }
+}
+
+
+
+/*************************
+*  Funciones auxiliares  *
+**************************/
 
 char *get_container_id(const char *cgroup_path){
     char buf[512];
@@ -207,30 +352,13 @@ char *get_container_id(const char *cgroup_path){
     return NULL;
 }
 
-void get_time(uint64_t timestamp_ns){
-    // convierto nanoseg → segundos
-    time_t ts = (time_t)(timestamp_ns / 1000000000ULL);
-    char *s = ctime(&ts);
-    if (s) {
-        printf("Fecha y hora: %s", s);
-    } else {
-        perror("ctime");
-    }
-}
-
-void decode_clone_flags(uint64_t flags) {
-    
-    printf("Flags: ");
-        if (flags & CLONE_NEWNS)      printf("CLONE_NEWNS ");
-        if (flags & CLONE_NEWCGROUP)  printf("CLONE_NEWCGROUP ");
-        if (flags & CLONE_NEWUTS)     printf("CLONE_NEWUTS ");
-        if (flags & CLONE_NEWIPC)     printf("CLONE_NEWIPC ");
-        if (flags & CLONE_NEWUSER)    printf("CLONE_NEWUSER ");
-        if (flags & CLONE_NEWPID)     printf("CLONE_NEWPID ");
-        if (flags & CLONE_NEWNET)     printf("CLONE_NEWNET ");
-        if (flags & CLONE_NEWTIME)    printf("CLONE_NEWTIME ");
-    printf("\n");
-    
+char *get_time_str() {
+    static char buf[64];
+    time_t now = time(NULL);
+    struct tm tm;
+    localtime_r(&now, &tm);
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
+    return buf;
 }
 
 void update_flags(ns_flags_counters_t *counters, uint64_t flags) {
@@ -243,7 +371,6 @@ void update_flags(ns_flags_counters_t *counters, uint64_t flags) {
     if (flags & CLONE_NEWCGROUP) counters->cgroup++;
     if (flags & CLONE_NEWTIME)   counters->time++;
 }
-
 
 uint64_t get_cgroup_id_from_path(const char *cgroup_path) {
     struct stat st;
@@ -291,15 +418,17 @@ void extract_pod_and_container(const char *path, char *pod_id, size_t pod_len, c
     }
 }
 
-int get_node_name(char *buf, size_t bufsize) {
+void decode_clone_flags(uint64_t flags) {
+    char flags_str[256] = "Flags: ";
 
-    if (gethostname(buf, bufsize) == 0) {
-        buf[bufsize - 1] = '\0'; // asegurar terminación
-        return 0; // éxito
-    }
+    if (flags & CLONE_NEWNS)      strcat(flags_str, "CLONE_NEWNS ");
+    if (flags & CLONE_NEWCGROUP)  strcat(flags_str, "CLONE_NEWCGROUP ");
+    if (flags & CLONE_NEWUTS)     strcat(flags_str, "CLONE_NEWUTS ");
+    if (flags & CLONE_NEWIPC)     strcat(flags_str, "CLONE_NEWIPC ");
+    if (flags & CLONE_NEWUSER)    strcat(flags_str, "CLONE_NEWUSER ");
+    if (flags & CLONE_NEWPID)     strcat(flags_str, "CLONE_NEWPID ");
+    if (flags & CLONE_NEWNET)     strcat(flags_str, "CLONE_NEWNET ");
+    if (flags & CLONE_NEWTIME)    strcat(flags_str, "CLONE_NEWTIME ");
 
-    // Error
-    buf[0] = '\0';
-    return -1;
+    zlog_info(c, "%s", flags_str);
 }
-

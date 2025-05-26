@@ -15,6 +15,8 @@
 #include "../include/handle_event.h"
 #include "../include/metrics.h"
 #include "../include/http_server.h"
+#include <zlog.h>
+
 
 
 static volatile bool exiting = false;
@@ -57,6 +59,22 @@ int main(int argc, char **argv) {
     signal(SIGINT, handle_signal);
     signal(SIGTERM, handle_signal);
 
+
+    int rc = zlog_init("./zlog.conf");
+    if (rc) {
+        fprintf(stderr, "Fallo al inicializar zlog\n");
+        return -1;
+    }
+
+    c = zlog_get_category("containerspy");
+    if (!c) {
+        fprintf(stderr, "Fallo al detectar la categoría 'containerSpy'\n");
+        zlog_fini();
+        return -2;
+    }
+    printf("zlog inicializado correctamente y categoría cargada\n");
+
+
     /* Allocate ring buffer */
     struct ring_buffer *rb = ring_buffer__new(
         bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
@@ -77,6 +95,7 @@ int main(int argc, char **argv) {
 
     ring_buffer__free(rb);
     http_server_stop(ctx);
+    zlog_fini();
     event_handler_cleanup();
 
 cleanup:
