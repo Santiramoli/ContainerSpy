@@ -22,9 +22,17 @@ spec:
       imagePullSecrets:
       - name: regcred
       securityContext:
-        # Opcional, ajusta nivel SELinux si quieres probar aquí (puedes eliminar si prefieres)
         seLinuxOptions:
           level: "s0:c123,c456"
+      initContainers:
+      - name: init-log-dir
+        image: busybox
+        command: ["sh", "-c", "mkdir -p /var/log/containerSpy && chown -R 1000:1000 /var/log/containerSpy"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: log-volume
+          mountPath: /var/log/containerSpy
       containers:
       - name: containerspy
         image: chris3bass/containerspy:latest
@@ -42,7 +50,9 @@ spec:
           readOnly: true
         - name: proc
           mountPath: /proc
-          readOnly: false   # importante para evitar error con SELinux y labels
+          readOnly: false
+        - name: log-volume
+          mountPath: /var/log/containerSpy
       volumes:
       - name: sys
         hostPath:
@@ -50,4 +60,8 @@ spec:
       - name: proc
         hostPath:
           path: /proc
+      - name: log-volume
+        hostPath:
+          path: /var/log/containerSpy
+          type: DirectoryOrCreate
 
