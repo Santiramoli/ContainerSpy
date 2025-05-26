@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <zlog.h>
 
 
 #define TASK_COMM_LEN 16
@@ -14,7 +15,16 @@
 #define EVT_PROCESS_FORK 5
 #define EVT_PROCESS_EXEC 6
 #define EVT_PROCESS_EXIT 7
-#define EVT_CGROUP_ATTACH_TASK 8
+#define EVT_CLONE_EXIT 8
+#define EVT_UNSHARE_EXIT 9
+#define EVT_SETNS_EXIT 10
+#define EVT_OPEN 11
+#define EVT_OPENAT 12
+#define EVT_OPEN_EXIT 13
+#define EVT_OPENAT_EXIT 14
+#define EVT_WRITE 15
+#define EVT_CLOSE 16
+#define EVT_WRITE_EXIT 17
 #define MAX_ID_LEN 64
 #define CLONE_NEWNS      0x00020000
 #define CLONE_NEWCGROUP  0x02000000
@@ -29,7 +39,11 @@
 #define MAX_PROCS   65536
 #define MAX_CGROUPS 4096
 #define NS_MASK (CLONE_NEWNS|CLONE_NEWCGROUP|CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET|CLONE_NEWTIME)
-
+extern const char *base_path;
+extern char pod_id[128];
+extern char container_id[128];
+extern char node_name[64];
+extern zlog_category_t *c;
 
 /****************************************************
 * Estructuras para la gestión de pods y containers  *
@@ -77,10 +91,11 @@ struct event_t {
     char comm[TASK_COMM_LEN];
     uint32_t type;
     uint64_t flags;
-    uint8_t  is_ns_related;
     uint64_t cgroup_id;
     char cgroup_path[256];
     char filename[128];
+    long ret;
+    uint64_t latency_ns;
 };
 
 
@@ -94,7 +109,16 @@ static const char *event_names[] = {
     "FORK",
     "EXEC",
     "EXIT",
-    "CGROUP_ATTACH"
+    "CLONE_EXIT",
+    "UNSHARE_EXIT",
+    "SETNS_EXIT",
+    "OPENAT",
+    "OPEN",
+    "WRITE",
+    "OPEN_EXIT",
+    "OPENAT_EXIT",
+    "WRITE_EXIT",
+    "CLOSE"
 };
 
 // Estructura de la lista que almacena los ids de los pods
@@ -103,5 +127,8 @@ typedef struct {
     size_t count;            // Número actual de pods
     size_t capacity;         // Capacidad reservada del array 
 } id_list_t;
+
+extern id_list_t pods;
+
 
 #endif
