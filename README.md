@@ -46,3 +46,20 @@ ContainerSpy converts raw data into structured metrics and logs, which are:
 Demonstrate how low-level observability powered by eBPF can **enhance security and traceability** in Kubernetes environments, overcoming the blind spots of traditional container auditing tools.
 
 ---
+
+## 🛠️ How to Use ContainerSpy
+
+Navigate to the bpf/ directory and run:
+1. make clean
+2. make
+
+Navigate to the src/ directory and compile the main loader:
+1. make clean
+2. make
+
+Once everything is built, execute the binary with root privileges: sudo ./main
+
+
+
+
+
