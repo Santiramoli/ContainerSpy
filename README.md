@@ -50,12 +50,16 @@ Demonstrate how low-level observability powered by eBPF can **enhance security a
 ## 🛠️ How to Use ContainerSpy
 
 Navigate to the bpf/ directory and run:
-> make clean
-> make
+```
+make clean
+make
+```
 
 Navigate to the src/ directory and compile the main loader:
-> make clean
->  make
+```
+make clean
+make
+```
 
 Once everything is built, execute the binary with root privileges: sudo ./main
 
